@@ -1,0 +1,110 @@
+<html>
+<head>
+<title>eBay Search Results</title>
+<style type="text/css">body { font-family: arial,sans-serif;} </style>
+<script src="http://code.jquery.com/jquery-1.7.1.js">  </script>
+<script>
+var keywords = '';
+var globalCatId = '';
+
+function getCategory(root)
+{
+	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
+	globalCatId = items[0].primaryCategory[0].categoryId;
+	
+	$.ajax({
+	  	url:  	"http://svcs.ebay.com/services/search/FindingService/v1?"+
+				"SECURITY-APPNAME=Architec-a99c-43cd-8c3a-e6079c9fcdf4"+
+				"&OPERATION-NAME=findItemsAdvanced"+
+				"&SERVICE-VERSION=1.0.0&RESPONSE-DATA-FORMAT=JSON"+
+				"&REST-PAYLOAD&keywords="+keywords+
+				"&paginationInput.entriesPerPage=20"+
+				"&sortOrder=EndTimeSoonest"+
+				"&categoryId="+globalCatId,
+	  	context: document.body,
+	  	success: _cb_findItemsByKeywords,
+	  	dataType: "jsonp"
+	});
+
+}
+
+function dostuff(keywords){	
+	//alert(keywords);
+	$.ajax({
+  		url: 	"http://svcs.ebay.com/services/search/FindingService/v1?"+
+				"SECURITY-APPNAME=Architec-a99c-43cd-8c3a-e6079c9fcdf4"+
+				"&OPERATION-NAME=findItemsAdvanced"+
+				"&SERVICE-VERSION=1.0.0"+
+				"&RESPONSE-DATA-FORMAT=JSON"+
+				"&REST-PAYLOAD"+
+				"&keywords="+keywords+
+				"&paginationInput.entriesPerPage=3",
+  		context: document.body,
+  		success: getCategory,
+  		dataType: "jsonp"
+	});
+
+}
+
+function _cb_findItemsByKeywords(root)
+{
+	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
+	var html = [];
+
+	html.push('<table width="100%" border="0" cellspacing="0" cellpadding="3"><tbody>');
+  
+	for (var i = 0; i < items.length; ++i)  
+	{
+    	var item     = items[i];
+    	var title    = item.title;
+    	var pic      = item.galleryURL;
+    	var viewitem = item.viewItemURL;
+    	var price    = item.sellingStatus[0].currentPrice[0].__value__;
+    	var endTime  = item.listingInfo[0].endTime;
+    	var bidCount = item.sellingStatus[0].bidCount;
+    	var category = item.primaryCategory[0].categoryId;
+
+    if (null != title && null != viewitem)
+    {
+      	if (bidCount == null) bidCount = "?";
+      	html.push('<tr><td>' + '<img src="' + pic + '" border="0">' + '</td>' + 
+        	'<td><a href="' + viewitem + '" target="_blank">' + title + '</a></td>' +
+        	'<td>Price: ' + price + '</td>' +
+        	'<td>BidCount: ' + bidCount + '</td>' +
+        	'<td>Category: ' + category + '</td>' +
+			'<td>EndTimeParse: ' + Date.parse(endTime) + '</td>' +
+        	'<td>End Time: ' + endTime + '<td></tr>');
+    	}
+  	}
+  	html.push('</tbody></table>');
+  	document.getElementById("results").innerHTML = html.join("");
+}
+
+
+</script>
+
+</head> 
+<body>
+<h1>eBay Search Results</h1>
+<div id="results"></div>
+
+
+Query: <input type="text" id="searchQuery" value="ipod" ></input>
+<button type="button" id="submitSearch"/>Submit </button>
+
+
+<script type="text/javascript">
+
+$(function() {  
+	 $("#submitSearch").click(function() {  
+	    keywords = $("input#searchQuery").val();
+		dostuff(keywords);
+	  });  
+	});
+
+	
+</script>
+
+
+</body>
+</html>
