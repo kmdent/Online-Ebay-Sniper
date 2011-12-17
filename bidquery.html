@@ -6,7 +6,12 @@
 <script>
 var keywords = '';
 var globalCatId = '';
-
+var endDate = '';
+var toEnd = 0;
+var maxPrice = '';
+var goods = new Array();
+var binStat = new Object();
+var lambda = 2.5;
 function getCategory(root)
 {
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
@@ -18,17 +23,19 @@ function getCategory(root)
 				"&OPERATION-NAME=findItemsAdvanced"+
 				"&SERVICE-VERSION=1.0.0&RESPONSE-DATA-FORMAT=JSON"+
 				"&REST-PAYLOAD&keywords="+keywords+
-				"&paginationInput.entriesPerPage=20"+
+				//"&paginationInput.entriesPerPage=20"+
 				"&sortOrder=EndTimeSoonest"+
+				"&itemFilter(0).name=MaxPrice"+
+				"&itemFilter(0).value="+maxPrice+
 				"&categoryId="+globalCatId,
 	  	context: document.body,
-	  	success: _cb_findItemsByKeywords,
+	  	success: buildGoods,
 	  	dataType: "jsonp"
 	});
 
 }
 
-function dostuff(keywords){	
+function dostuff(){	
 	//alert(keywords);
 	$.ajax({
   		url: 	"http://svcs.ebay.com/services/search/FindingService/v1?"+
@@ -46,40 +53,100 @@ function dostuff(keywords){
 
 }
 
-function _cb_findItemsByKeywords(root)
+function displayGoods()
 {
-	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
 	var html = [];
 
 	html.push('<table width="100%" border="0" cellspacing="0" cellpadding="3"><tbody>');
-  
-	for (var i = 0; i < items.length; ++i)  
-	{
-    	var item     = items[i];
-    	var title    = item.title;
-    	var pic      = item.galleryURL;
-    	var viewitem = item.viewItemURL;
-    	var price    = item.sellingStatus[0].currentPrice[0].__value__;
-    	var endTime  = item.listingInfo[0].endTime;
-    	var bidCount = item.sellingStatus[0].bidCount;
-    	var category = item.primaryCategory[0].categoryId;
 
-    if (null != title && null != viewitem)
-    {
-      	if (bidCount == null) bidCount = "?";
-      	html.push('<tr><td>' + '<img src="' + pic + '" border="0">' + '</td>' + 
-        	'<td><a href="' + viewitem + '" target="_blank">' + title + '</a></td>' +
-        	'<td>Price: ' + price + '</td>' +
-        	'<td>BidCount: ' + bidCount + '</td>' +
-        	'<td>Category: ' + category + '</td>' +
-			'<td>EndTimeParse: ' + Date.parse(endTime) + '</td>' +
-        	'<td>End Time: ' + endTime + '<td></tr>');
-    	}
+	for (var i = 0; i < goods.length; ++i)  
+	{
+		item = goods[i];
+      		html.push('<tr><td>' + '<img src="' + item.pic + '" border="0">' + '</td>' + 
+        		'<td><a href="' + item.viewitem + '" target="_blank">' + item.title + '</a></td>' +
+        		'<td>Price: ' + item.price + '</td>' +
+        		'<td>BidCount: ' + item.bidCount + '</td>' +
+        		'<td>Category: ' + item.category + '</td>' +
+			'<td>SnipeReccomendation: ' + binStat.goods[i] + '</td>' +
+        		'<td>End Time: ' + item.endTimePretty + '<td></tr>');
   	}
   	html.push('</tbody></table>');
   	document.getElementById("results").innerHTML = html.join("");
 }
 
+function buildGoods(root)
+{
+	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
+	var prediction= new Array();
+	
+	var count = 0;
+	var pcount = 0;
+	var item, title, pic, viewitem, price, endTime, bidCount, category;
+	for (var i = 0; i < items.length; ++i)  
+	{
+    		item     = items[i];
+    		endTime  = Date.parse(item.listingInfo[0].endTime);
+		if (endTime > endDate) break;
+		bidCount = item.sellingStatus[0].bidCount;
+		if (bidCount != null) {
+			goods[count] = new Object();
+    			goods[count].title    = item.title;
+    			goods[count].pic      = item.galleryURL;
+    			goods[count].viewitem = item.viewItemURL;
+    			goods[count].price    = item.sellingStatus[0].currentPrice[0].__value__;
+			goods[count].category = item.primaryCategory[0].categoryId;
+			goods[count].endTimePretty = item.listingInfo[0].endTime;
+			goods[count].endTime = endTime;
+			goods[count].bidCount = bidCount;
+			count++;
+		}
+		if(item.listingInfo[0].buyItNowAvailable != "false"){
+			prediction[pcount] = parseFloat(item.listingInfo[0].buyItNowPrice[0].__value__);
+			pcount++;	
+		}
+
+	}
+	prediction.sort();
+	findStats(prediction);
+	displayGoods();
+}
+
+
+function findStats(prediction){
+
+	//Got the mean
+	var mean = 0;
+	for(var i =0; i < prediction.length; i++){
+		mean += prediction[i];
+	}
+	mean = mean/prediction.length;
+	binStat.mean = mean;
+
+	//Got the varience
+	var varience = 0;
+	for(var i =0; i < prediction.length; i++){
+		varience += Math.pow(prediction[i]-mean, 2);
+	}
+	varience = varience*(1/(prediction.length-1));
+	binStat.varience = varience;
+	binStat.stdDev = Math.sqrt(varience);
+
+	//Get end time stuff
+	
+	var max = 0;
+	var min = 100000000000000;
+	for(var i = 0; i< goods.length; i++){
+		max = Math.max(max, goods[i].endTime);	
+		min = Math.min(min, goods[i].endTime);
+	}
+
+	binStat.goods = new Array();
+	
+	for(var i = 0; i < goods.length; i++){
+		binStat.goods[i] = binStat.mean -(((max- goods[i].endTime)/(max-min)) *(lambda*binStat.stdDev));	
+	}
+
+}
 
 </script>
 
@@ -89,7 +156,9 @@ function _cb_findItemsByKeywords(root)
 <div id="results"></div>
 
 
-Query: <input type="text" id="searchQuery" value="ipod" ></input>
+Query: <input type="text" id="searchQuery" value="ipod 64gb"></input><br/>
+End Date: <input type="text" id="dateQuery" value="12/19/2011" ></input><br/>
+Max Price: <input type="text" id="priceQuery" value="400" ></input>
 <button type="button" id="submitSearch"/>Submit </button>
 
 
@@ -97,8 +166,10 @@ Query: <input type="text" id="searchQuery" value="ipod" ></input>
 
 $(function() {  
 	 $("#submitSearch").click(function() {  
-	    keywords = $("input#searchQuery").val();
-		dostuff(keywords);
+		keywords = $("input#searchQuery").val();
+		endDate = Date.parse($("input#dateQuery").val()+" 23:59");
+		maxPrice = $("input#priceQuery").val();
+		dostuff();
 	  });  
 	});
 
