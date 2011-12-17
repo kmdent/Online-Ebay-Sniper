@@ -4,6 +4,7 @@
 <style type="text/css">body { font-family: arial,sans-serif;} </style>
 <script src="http://code.jquery.com/jquery-1.7.1.js">  </script>
 <script>
+var nextItemEnd = 60000;	
 var keywords = '';
 var globalCatId = '';
 var endDate = '';
@@ -12,6 +13,11 @@ var maxPrice = '';
 var goods = new Array();
 var binStat = new Object();
 var lambda = 2.5;
+var timer;
+var endedPrices = new Array();
+var isFirst = 1;
+
+
 function getCategory(root)
 {
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
@@ -106,13 +112,41 @@ function buildGoods(root)
 		}
 
 	}
+	alert("blad blah fucking blah");
 	prediction.sort();
 	findStats(prediction);
 	displayGoods();
+	var action = doAnalysis();
+	var curtime = new Date;
+	alert(nextItemEnd- curtime.getTime());
+	var results = doBid(action);
+
+	if(!results.won){
+		timer = setTimeout("dostuff()", (nextItemEnd- (curtime.getTime()-20000)));
+	}else{
+		endAll(results);
+	}
+	isFirst = 0;
 }
 
 
 function findStats(prediction){
+
+	var max = 0;
+	var min = 100000000000000;
+	for(var i = 0; i< goods.length; i++){
+		max = Math.max(max, goods[i].endTime);	
+		min = Math.min(min, goods[i].endTime);
+		if(min == goods[i].endTime && !isFirst){
+			endedPrices[endedPrices-1] = goods[i].price;
+		}
+	}
+	nextItemEnd = min;
+	
+	for(var i =0; i < endedPrices.length; i++){
+		prediction[prediction.length-1] = endedPrices[i];
+	}
+
 
 	//Got the mean
 	var mean = 0;
@@ -133,13 +167,7 @@ function findStats(prediction){
 
 	//Get end time stuff
 	
-	var max = 0;
-	var min = 100000000000000;
-	for(var i = 0; i< goods.length; i++){
-		max = Math.max(max, goods[i].endTime);	
-		min = Math.min(min, goods[i].endTime);
-	}
-
+		
 	binStat.goods = new Array();
 	
 	for(var i = 0; i < goods.length; i++){
@@ -147,6 +175,22 @@ function findStats(prediction){
 	}
 
 }
+
+function doAnalysis(){
+	var action = new Object();
+	return action;
+}
+
+function doBid(action){
+	var results = new Object();
+	results.won = false;
+	return results;
+}
+
+function endAll(){
+	//Do End all
+}
+
 
 </script>
 
