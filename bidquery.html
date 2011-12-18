@@ -24,6 +24,10 @@ var curGood;
 var timer;
 var prediction = new Array();
 var hasEnded = 0;
+var action = new Object();
+var analysis = new Object();
+
+
 function getCategory(root)
 {
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
@@ -114,7 +118,8 @@ function displayGoods()
         		'<td><a href="' + curGood.viewitem + '" target="_blank">' + curGood.title + '</a></td>' +
         		'<td>Price: $' + curGood.price.toFixed(2)  + '</td>' +
         		'<td>BidCount: ' + curGood.bidCount + '</td>' +
-				'<td>Snipe At: $' + curGood.snipe + '</td>' +
+			'<td>Predicted Price: $' + analysis.goods[analysis.minpredPrice].predPrice + '</td>' +
+			'<td>Snipe At: $' + analysis.snipe + '</td>' +
         		'<td>End Time: ' + curGood.endTimePretty + '<td></tr>');
 	html.push('</tbody></table>');
 	document.getElementById("nextItem").innerHTML = html.join("");		
@@ -133,7 +138,7 @@ function displayGoods()
         		'<td>Price: ' + item.price + '</td>' +
         		'<td>BidCount: ' + item.bidCount + '</td>' +
         		'<td>Category: ' + item.category + '</td>' +
-				'<td>SnipeReccomendation: ' + binStat.goods[i] + '</td>' +
+				'<td>Predicted Price: ' + analysis.goods[i].predPrice + '</td>' +
         		'<td>End Time: ' + item.endTimePretty + '<td></tr>');
   	}
   	html.push('</tbody></table>');
@@ -148,14 +153,16 @@ function buildGoods(root)
 	
 	var count = 0;
 	var pcount = 0;
-	var item, title, pic, viewitem, price, endTime, bidCount, category;
+	var item, title, pic, viewitem, price, endTime, bidCount, category, condition;
 	for (var i = 0; i < items.length; ++i)  
 	{
     		item     = items[i];
     		endTime  = Date.parse(item.listingInfo[0].endTime);
 		if (endTime > endDate) break;
 		bidCount = item.sellingStatus[0].bidCount;
-		if (bidCount != null) {
+		condition = item.condition[0].conditionId
+
+		if (bidCount != null && condition != "7000") {
 			goods[count] = new Object();
     			goods[count].title    = item.title;
     			goods[count].pic      = item.galleryURL;
@@ -165,7 +172,7 @@ function buildGoods(root)
 			goods[count].endTimePretty = item.listingInfo[0].endTime;
 			goods[count].endTime = endTime;
 			goods[count].endTimeObject = new Date(endTime);
-			goods[count].bidCount = bidCount;
+			goods[count].bidCount = parseInt(bidCount);
 			count++;
 		}
 		if(item.listingInfo[0].buyItNowAvailable != "false"){
@@ -183,13 +190,13 @@ function buildGoods(root)
 	prediction.sort();
 	findStats(prediction);
 	
-	var action = doAnalysis();
+	action = doAnalysis();
 	displayGoods();
 	var curtime = new Date;
 
 	/*Doing the actual bidding*/
 	if(action.willBid && !isFirst){
-		var t = setTimeout("bidQuery(1, action)", 10000); 
+		var t = setTimeout("bidQuery()", 10000); 
 	}
 
 	if(!results.won && !action.willBid){
@@ -197,7 +204,7 @@ function buildGoods(root)
 			timer = setTimeout("dostuff(1)", (nextItemEnd- (curtime.getTime()+20000)));
 		}else{	
 			//alert("Our time is less than zero");
-			timer = setTimeout("dostuff(0)", 25000);
+			timer = setTimeout("dostuff(0)", 21000);
 		}
 	}else{
 		endAll(results);
@@ -291,19 +298,37 @@ function doAnalysis(){
 	var action = new Object();
 	curGood = goods[0];
 	var goodNum = 0;
+	analysis = new Object();
+	var curTime = new Date();
 	//Find the soonest ending good
-	for(var i = 0; i< goods.length; i++){
-		if(curGood.endTime > goods[i].endTime){
-			curGood = goods[i];
-			goodNum = i;
+	analysis.goods = new Array();
+	for(var i = 0; i < goods.length; i++){
+		analysis.goods[i] = new Object();
+		if(binStat.mean > goods[i].price){
+			analysis.goods[i].BINWeight = (goods[i].endTime- curTime.getTime())/(endDate- curTime.getTime());
+		}else{
+			analysis.goods[i].BINWeight = 0;	
+		}
+		analysis.goods[i].WeightedPrice = goods[i].price*(1- analysis.goods[i].BINWeight) + (binStat.mean * analysis.goods[i].BINWeight);
+		analysis.goods[i].predPrice = analysis.goods[i].WeightedPrice + ((goods[i].bidCount/stats.avgBidCount)*.1) +(Math.sqrt((goods[i].endTime- curTime.getTime())/(60*60*1000))*.1);
+	}
+	analysis.MPW = 1/goods.length;
+
+	var minp = 0;
+	for(var i = 0; i < analysis.goods.length; i++){
+		if(analysis.goods[i].predPrice < analysis.goods[minp].predPrice){
+			minp = i;
 		}
 	}
-		
-	if(!isFirst ){//&& (curGood.endTime(curtime.getTime()+20000) > 0)){
-		if(binStat.goods[goodNum] > curGood.price){
-			alert("Going to bid on good "+curGood.title +" With a bid of: " + binStat.goods[goodNum] + " and the price is " + curGood.price);
+	analysis.minpredPrice = minp;
+	analysis.snipe = analysis.goods[minp].predPrice*(1-analysis.MPW) + (maxPrice * analysis.MPW);
+
+	curGood = goods[analysis.minpredPrice]
+	if(!isFirst ){
+		if(analysis.snipe > curGood.price && (analysis.minpredPrice == 0)  && hasEnded ){
+			alert("Going to bid on good "+curGood.title +" With a bid of: " + analysis.snipe + " and the price is " + curGood.price);
 			action.willBid = true;
-			action.bid = binStat.goods[goodNum];
+			action.bid = analysis.snipe;
 			action.good = curGood;
 		}else{
 			//alert("Not worth bidding on good: " + curGood.title +" With a price of: " + curGood.price + " and our valuation is " + binStat.goods[goodNum]);
@@ -316,7 +341,7 @@ function doAnalysis(){
 	return action;
 }
 
-function doBid(action){
+function doBid(){
 	results = new Object();
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
 	var price = 0;
@@ -326,7 +351,7 @@ function doBid(action){
 	if(action.bid > price){
 		alert("Bid on "+action.good.title +" With a bid of: " + action.bid + " and the price is " + curGood.price);
 	}else{
-		timer = setTimeout("dostuff(0)", 25000);
+		timer = setTimeout("dostuff(0)", 21000);
 	}
 	results.paid = action.bid;
 	results.good = action.good;
@@ -335,7 +360,7 @@ function doBid(action){
 	return results;
 }
 
-function bidQuery(root,action)
+function bidQuery(root)
 {
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
 	globalCatId = items[0].primaryCategory[0].categoryId;
@@ -352,7 +377,7 @@ function bidQuery(root,action)
 				"&itemFilter(0).value="+maxPrice+
 				"&categoryId="+globalCatId,
 	  	context: document.body,
-	  	success: doBid(action),
+	  	success: doBid(),
 	  	dataType: "jsonp"
 	});
 
