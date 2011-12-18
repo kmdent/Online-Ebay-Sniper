@@ -186,19 +186,17 @@ function buildGoods(root)
 	var action = doAnalysis();
 	displayGoods();
 	var curtime = new Date;
-	//alert(nextItemEnd- curtime.getTime());
-	//var results = doBid(action);
 
 	/*Doing the actual bidding*/
 	if(action.willBid && !isFirst){
 		var t = setTimeout("bidQuery(1, action)", 10000); 
 	}
 
-	if(!results.won){
+	if(!results.won && !action.willBid){
 		if(nextItemEnd- (curtime.getTime()+20000) > 0){
 			timer = setTimeout("dostuff(1)", (nextItemEnd- (curtime.getTime()+20000)));
 		}else{	
-			alert("Our time is less than zero");
+			//alert("Our time is less than zero");
 			timer = setTimeout("dostuff(0)", 25000);
 		}
 	}else{
@@ -308,7 +306,7 @@ function doAnalysis(){
 			action.bid = binStat.goods[goodNum];
 			action.good = curGood;
 		}else{
-			alert("Not worth bidding on good: " + curGood.title +" With a price of: " + curGood.price + " and our valuation is " + binStat.goods[goodNum]);
+			//alert("Not worth bidding on good: " + curGood.title +" With a price of: " + curGood.price + " and our valuation is " + binStat.goods[goodNum]);
 			action.willBid = false;
 		}
 	}else{
@@ -327,6 +325,8 @@ function doBid(action){
 
 	if(action.bid > price){
 		alert("Bid on "+action.good.title +" With a bid of: " + action.bid + " and the price is " + curGood.price);
+	}else{
+		timer = setTimeout("dostuff(0)", 25000);
 	}
 	results.paid = action.bid;
 	results.good = action.good;
