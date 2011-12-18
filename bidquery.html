@@ -16,12 +16,27 @@ var lambda = 2.5;
 var timer;
 var endedPrices = new Array();
 var isFirst = 1;
-
-
+var results= new Object();
+var endDateFormatted;
+var stats = new Object();
+var categoryName;
+var curGood;
+var timer;
+var prediction = new Array();
+var hasEnded = 0;
 function getCategory(root)
 {
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
+	if (items[0] == null) {
+		document.getElementById("queryLine").innerHTML = "<br/>No items for auction match your search criteria.<br/>" +
+		"Try differnt keywords or extending the date.";
+		clearResults();
+		return;
+	}
+		
 	globalCatId = items[0].primaryCategory[0].categoryId;
+	
+	categoryName = items[0].primaryCategory[0].categoryName;
 	
 	$.ajax({
 	  	url:  	"http://svcs.ebay.com/services/search/FindingService/v1?"+
@@ -41,7 +56,9 @@ function getCategory(root)
 
 }
 
-function dostuff(){	
+function dostuff(h){
+	hasEnded = h;
+	clearResults();
 	//alert(keywords);
 	$.ajax({
   		url: 	"http://svcs.ebay.com/services/search/FindingService/v1?"+
@@ -59,21 +76,64 @@ function dostuff(){
 
 }
 
+
 function displayGoods()
 {
+	// Display query line
+	document.getElementById("queryLine").innerHTML = "<br/>Showing results for \""+keywords+"\" until " + endDateFormatted + " at maximum price " + maxPrice+ "<br/>" +
+	"Results refined to items categorized under " + categoryName;
+	
+	
+	
+	
+	// Statistics
+	document.getElementById("stats").innerHTML = "<h3>Statistics</h3>  <p>" +
+			"<table border=\"1px\" cellspacing=\"0\" cellpadding=\"3\">"+
+				"<tr><td>Total Valid items:</td><td>"+ goods.length + "</td></tr>" +
+				"<tr><td>Average BuyITNow price:</td><td>"+binStat.mean + "</td></tr>" +
+				"<tr><td>BuyITNow price standard deviation:</td><td>"+binStat.stdDev + "</td></tr>" +
+				"<tr><td>Average current price:</td><td>"+ stats.averagePrice + "</td></tr>" +
+				"<tr><td>Current price standard deviation:</td><td>"+ Math.sqrt(stats.priceVariance) + "</td></tr>" +
+				"<tr><td>Max current price:</td><td>"+ stats.maxPrice + "</td></tr>" +
+				"<tr><td>Min current price:</td><td>"+ stats.minPrice + "</td></tr>" +
+				"<tr><td>Average Bid Count:</td><td>"+ stats.avgBidCount + "</td></tr>" +
+				"<tr><td>Min Bid Count:</td><td>"+ stats.minBidCount + "</td></tr>" +
+				"<tr><td>Max Bid Count:</td><td>"+ stats.maxBidCount + "</td></tr>" +// +
+				//"<tr><td>Min end Time:</td><td>"+ constructDate(stats.minEndTime) + "</td></tr>" +
+				//"<tr><td>Max end Time:</td><td>"+ constructDate(stats.maxEndTime) + "</td></tr>";
+				
+			"</table>";
+			
+	// Target Item
+	document.getElementById("countdownMessage").innerHTML = "Sniping for this item will take place in:";
+	GetCount(curGood.endTimeObject, 'countdown');
 	var html = [];
-
-	html.push('<table width="100%" border="0" cellspacing="0" cellpadding="3"><tbody>');
+	html.push('<h3>Current Target Item to Snipe</h3>');
+	html.push('<table width="100%" border="1" cellspacing="0" cellpadding="3"><tbody>');
+	html.push('<tr><td>' + '<img src="' + curGood.pic + '" border="1">' + '</td>' + 
+        		'<td><a href="' + curGood.viewitem + '" target="_blank">' + curGood.title + '</a></td>' +
+        		'<td>Price: $' + curGood.price.toFixed(2)  + '</td>' +
+        		'<td>BidCount: ' + curGood.bidCount + '</td>' +
+				'<td>Snipe At: $' + curGood.snipe + '</td>' +
+        		'<td>End Time: ' + curGood.endTimePretty + '<td></tr>');
+	html.push('</tbody></table>');
+	document.getElementById("nextItem").innerHTML = html.join("");		
+			
+			
+	html = [];
+	
+	html.push('<h3>All Items</h3>');
+	html.push('<table width="100%" border="1" cellspacing="0" cellpadding="3"><tbody>');
 
 	for (var i = 0; i < goods.length; ++i)  
 	{
 		item = goods[i];
-      		html.push('<tr><td>' + '<img src="' + item.pic + '" border="0">' + '</td>' + 
+      		html.push('<tr><td>' + '<img src="' + item.pic + '" border="1">' + '</td>' + 
         		'<td><a href="' + item.viewitem + '" target="_blank">' + item.title + '</a></td>' +
         		'<td>Price: ' + item.price + '</td>' +
         		'<td>BidCount: ' + item.bidCount + '</td>' +
         		'<td>Category: ' + item.category + '</td>' +
-			'<td>SnipeReccomendation: ' + binStat.goods[i] + '</td>' +
+				'<td>SnipeReccomendation: ' + binStat.goods[i] + '</td>' +
         		'<td>End Time: ' + item.endTimePretty + '<td></tr>');
   	}
   	html.push('</tbody></table>');
@@ -82,8 +142,9 @@ function displayGoods()
 
 function buildGoods(root)
 {
+	goods = [];
 	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
-	var prediction= new Array();
+	prediction= new Array();
 	
 	var count = 0;
 	var pcount = 0;
@@ -99,10 +160,11 @@ function buildGoods(root)
     			goods[count].title    = item.title;
     			goods[count].pic      = item.galleryURL;
     			goods[count].viewitem = item.viewItemURL;
-    			goods[count].price    = item.sellingStatus[0].currentPrice[0].__value__;
+    			goods[count].price    = parseFloat(item.sellingStatus[0].currentPrice[0].__value__);
 			goods[count].category = item.primaryCategory[0].categoryId;
 			goods[count].endTimePretty = item.listingInfo[0].endTime;
 			goods[count].endTime = endTime;
+			goods[count].endTimeObject = new Date(endTime);
 			goods[count].bidCount = bidCount;
 			count++;
 		}
@@ -112,17 +174,33 @@ function buildGoods(root)
 		}
 
 	}
-	alert("blad blah fucking blah");
+	if (goods.length == 0) {
+		document.getElementById("queryLine").innerHTML = "<br/>No items for auction match your search criteria.<br/>" +
+		"Try differnt keywords or extending the date.";
+		return;
+	}
+	//alert("blad blah blah");
 	prediction.sort();
 	findStats(prediction);
-	displayGoods();
+	
 	var action = doAnalysis();
+	displayGoods();
 	var curtime = new Date;
-	alert(nextItemEnd- curtime.getTime());
-	var results = doBid(action);
+	//alert(nextItemEnd- curtime.getTime());
+	//var results = doBid(action);
+
+	/*Doing the actual bidding*/
+	if(action.willBid && !isFirst){
+		var t = setTimeout("bidQuery(1, action)", 10000); 
+	}
 
 	if(!results.won){
-		timer = setTimeout("dostuff()", (nextItemEnd- (curtime.getTime()-20000)));
+		if(nextItemEnd- (curtime.getTime()+20000) > 0){
+			timer = setTimeout("dostuff(1)", (nextItemEnd- (curtime.getTime()+20000)));
+		}else{	
+			alert("Our time is less than zero");
+			timer = setTimeout("dostuff(0)", 25000);
+		}
 	}else{
 		endAll(results);
 	}
@@ -137,14 +215,47 @@ function findStats(prediction){
 	for(var i = 0; i< goods.length; i++){
 		max = Math.max(max, goods[i].endTime);	
 		min = Math.min(min, goods[i].endTime);
-		if(min == goods[i].endTime && !isFirst){
-			endedPrices[endedPrices-1] = goods[i].price;
-		}
 	}
+	
+	if(min == goods[0].endTime && !isFirst && hasEnded){
+		endedPrices[endedPrices.length] = goods[0].price;
+	}
+
+
+
+
+	/// Get stats on the auction goods
+	stats.maxPrice = goods[0].price;
+	stats.minPrice = goods[0].price;
+	stats.averagePrice = parseFloat(goods[0].price);
+	stats.priceVariance = parseFloat(goods[0].price * goods[0].price);
+	stats.avgBidCount = parseInt(goods[0].bidCount);
+	stats.maxBidCount = goods[0].bidCount;
+	stats.minBidCount = goods[0].bidCount;
+	
+	for (var i = 1; i < goods.length; i++) {
+		stats.maxPrice = Math.max(stats.maxPrice, goods[i].price);
+		stats.minPrice = Math.min(stats.minPrice, goods[i].price);
+		stats.averagePrice += parseFloat(goods[i].price);
+		stats.priceVariance += parseFloat(goods[i].price * goods[i].price);
+		stats.avgBidCount += parseInt(goods[i].bidCount);
+		stats.maxBidCount = Math.max(stats.maxBidCount, goods[i].bidCount);
+		stats.minBidCount = Math.min(stats.minBidCount, goods[i].bidCount);
+	}
+	stats.averagePrice = stats.averagePrice / goods.length;
+	stats.priceVariance = (stats.priceVariance / goods.length) - (stats.averagePrice * stats.averagePrice);
+	stats.avgBidCount = stats.avgBidCount / goods.length;
+	stats.minEndTime = goods[0].endTime;
+	stats.maxEndTime = goods[goods.length-1].endTime;
+	
+	
+	
+	
+	
 	nextItemEnd = min;
 	
 	for(var i =0; i < endedPrices.length; i++){
-		prediction[prediction.length-1] = endedPrices[i];
+		prediction[prediction.length] = endedPrices[i];
 	}
 
 
@@ -171,54 +282,216 @@ function findStats(prediction){
 	binStat.goods = new Array();
 	
 	for(var i = 0; i < goods.length; i++){
-		binStat.goods[i] = binStat.mean -(((max- goods[i].endTime)/(max-min)) *(lambda*binStat.stdDev));	
+		binStat.goods[i] = binStat.mean -(((max- goods[i].endTime)/(max-min)) *(lambda*binStat.stdDev));
+		binStat.goods[i] = binStat.goods[i].toFixed(2);
+		goods[i].snipe = binStat.goods[i];
 	}
 
 }
 
 function doAnalysis(){
 	var action = new Object();
+	curGood = goods[0];
+	var goodNum = 0;
+	//Find the soonest ending good
+	for(var i = 0; i< goods.length; i++){
+		if(curGood.endTime > goods[i].endTime){
+			curGood = goods[i];
+			goodNum = i;
+		}
+	}
+		
+	if(!isFirst ){//&& (curGood.endTime(curtime.getTime()+20000) > 0)){
+		if(binStat.goods[goodNum] > curGood.price){
+			alert("Going to bid on good "+curGood.title +" With a bid of: " + binStat.goods[goodNum] + " and the price is " + curGood.price);
+			action.willBid = true;
+			action.bid = binStat.goods[goodNum];
+			action.good = curGood;
+		}else{
+			alert("Not worth bidding on good: " + curGood.title +" With a price of: " + curGood.price + " and our valuation is " + binStat.goods[goodNum]);
+			action.willBid = false;
+		}
+	}else{
+		action.willBid = false;
+	}
+	
 	return action;
 }
 
 function doBid(action){
-	var results = new Object();
-	results.won = false;
+	results = new Object();
+	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
+	var price = 0;
+    	item = items[0];
+   	price  = item.sellingStatus[0].currentPrice[0].__value__;
+
+	if(action.bid > price){
+		alert("Bid on "+action.good.title +" With a bid of: " + action.bid + " and the price is " + curGood.price);
+	}
+	results.paid = action.bid;
+	results.good = action.good;
+	results.won = true;
+			
 	return results;
 }
 
-function endAll(){
-	//Do End all
+function bidQuery(root,action)
+{
+	var items = root.findItemsAdvancedResponse[0].searchResult[0].item || [];
+	globalCatId = items[0].primaryCategory[0].categoryId;
+	
+	$.ajax({
+	  	url:  	"http://svcs.ebay.com/services/search/FindingService/v1?"+
+				"SECURITY-APPNAME=Architec-a99c-43cd-8c3a-e6079c9fcdf4"+
+				"&OPERATION-NAME=findItemsAdvanced"+
+				"&SERVICE-VERSION=1.0.0&RESPONSE-DATA-FORMAT=JSON"+
+				"&REST-PAYLOAD&keywords="+keywords+
+				"&paginationInput.entriesPerPage=1"+
+				"&sortOrder=EndTimeSoonest"+
+				"&itemFilter(0).name=MaxPrice"+
+				"&itemFilter(0).value="+maxPrice+
+				"&categoryId="+globalCatId,
+	  	context: document.body,
+	  	success: doBid(action),
+	  	dataType: "jsonp"
+	});
+
 }
 
+function endAll(){
+
+	alert("You won "+ result.good.title + " for a price of "+ result.paid );
+}
+
+function clearResults()
+{
+	document.getElementById("nextItem").innerHTML = "";
+	document.getElementById("stats").innerHTML = "";
+	document.getElementById("results").innerHTML = "";
+	document.getElementById("nextItem").innerHTML = "";
+	document.getElementById("countdownMessage").innerHTML = "";
+	document.getElementById("countdown").innerHTML = "";
+	if (timer != null) {
+		clearTimeout(timer);
+	}
+}
 
 </script>
+<link rel="stylesheet" type="text/css" media="all" href="960_12_col.css" /> 
+
 
 </head> 
 <body>
-<h1>eBay Search Results</h1>
-<div id="results"></div>
+	<div class="container_12" id="site" >
+		
+		<div class="grid_12" id="header" >
+        <h1>Laz-E-bay</h1>
+        </div><!--header-->
+        
+        <div class="grid_12" id="search" >
+			<div class="grid_7" id="searchLabels" >
+            	<table>
+                	<tr>
+             			<td>I really really want a (enter item keywords): </td><td><input type="text" id="searchQuery" value="ipod touch 64gb"></input></td>
+                        <tr>
+                        <td>And I really want it by (enter date): </td><td><input type="text" id="dateQueryMonth" size="2" value="12" />/
+            													<input type="text" id="dateQueryDay" size="2" value="19" />/
+            													<input type="text" id="dateQueryYear" size="4" value="2011" /></td>
+                                                                
+                                                                </tr>
+                                                                <tr>
+                        <td>But I'm not paying more than ($): </td><td><input type="text" id="priceQuery" value="400" ></input></td>
+                        </tr>
+                   </tr>
+                  </table>
 
+          
+   
+            </div>
+           
+            <div class="grid_3" id="gobutton1" >
+            	I'm ready...
+            	<input type="button" id="gobutton" value="Let's do it" />      
+            </div>
+     
 
-Query: <input type="text" id="searchQuery" value="ipod 64gb"></input><br/>
-End Date: <input type="text" id="dateQuery" value="12/19/2011" ></input><br/>
-Max Price: <input type="text" id="priceQuery" value="400" ></input>
-<button type="button" id="submitSearch"/>Submit </button>
+		</div><!--search-->
+        
+        <div class="grid_12" id="queryLine" ></div>
+        <div class="grid_12" id="nextItem" ></div>
+        <div class="gird_12" >
+        	<div class="grid_4" id="countdownMessage" ></div>
+            <div class="grid_3" id="countdown" > </div>
+        </div>
+        <div class="grid_12" id="stats" ></div>
+        <div class="grid_12" id="nextItem" ></div>
+        
+        
+        <div class="grid_12" id="results"></div>
 
+	</div><!--site-->
 
 <script type="text/javascript">
 
 $(function() {  
-	 $("#submitSearch").click(function() {  
+	 $("#gobutton").click(function() {  
+	 	clearResults();
 		keywords = $("input#searchQuery").val();
-		endDate = Date.parse($("input#dateQuery").val()+" 23:59");
-		maxPrice = $("input#priceQuery").val();
+		endDateFormatted = $("input#dateQueryMonth").val()+"/"+$("input#dateQueryDay").val()+"/"+$("input#dateQueryYear").val();
+		endDate = Date.parse(endDateFormatted+" 23:59");
+		maxPrice = parseFloat($("input#priceQuery").val());
+		
 		dostuff();
 	  });  
 	});
 
 	
 </script>
+
+<script type="text/javascript">
+
+function GetCount(ddate,iid){
+
+	dateNow = new Date();	//grab current date
+	
+	amount = ddate.getTime() - dateNow.getTime();	//calc milliseconds between dates
+	delete dateNow;
+
+	// if time is already past
+	if(amount < 0){
+		document.getElementById(iid).innerHTML="Now!";
+	}
+	// else date is still good
+	else{
+		days=0;hours=0;mins=0;secs=0;out="";
+
+		amount = Math.floor(amount/1000);//kill the "milliseconds" so just secs
+
+		days=Math.floor(amount/86400);//days
+		amount=amount%86400;
+
+		hours=Math.floor(amount/3600);//hours
+		amount=amount%3600;
+
+		mins=Math.floor(amount/60);//minutes
+		amount=amount%60;
+
+		secs=Math.floor(amount);//seconds
+
+		if(days != 0){out += days +" "+((days==1)?"day":"days")+", ";}
+		if(hours != 0){out += hours +" "+((hours==1)?"hour":"hours")+", ";}
+		out += mins +" "+((mins==1)?"min":"mins")+", ";
+		out += secs +" "+((secs==1)?"sec":"secs")+", ";
+		out = out.substr(0,out.length-2);
+		document.getElementById(iid).innerHTML=out;
+
+		timer = setTimeout(function(){GetCount(ddate,iid)}, 1000);
+	}
+}
+
+
+</script>
+
 
 
 </body>
